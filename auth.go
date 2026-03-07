@@ -100,7 +100,7 @@ func getAuthClient() *http.Client {
 		server.Shutdown(context.Background())
 		saveToken(tokenFile, token)
 
-		fmt.Println("✅ Successfully logged in and saved credentials!")
+		fmt.Println("Successfully logged in and saved credentials!")
 	}
 
 	return oauthConfig.Client(context.Background(), token)
