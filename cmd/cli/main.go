@@ -55,19 +55,25 @@ func main() {
 	oauth2Client := getAuthClient()
 	c := mal.NewClient(oauth2Client)
 
-	cmd := &cli.Command{
+	app := &cli.Command{
 		Name:  "anime",
-		Usage: "Download and list your currently watching anime",
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			err := animeList(c, ctx)
-			if err != nil {
-				return err
-			}
-			return nil
+		Usage: "A CLI tool to track and download your anime",
+		Commands: []*cli.Command{
+			{
+				Name:  "list",
+				Usage: "List your currently watching anime with episode progress",
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					err := animeList(c, ctx)
+					if err != nil {
+						return err
+					}
+					return nil
+				},
+			},
 		},
 	}
 
-	if err := cmd.Run(context.Background(), os.Args); err != nil {
+	if err := app.Run(context.Background(), os.Args); err != nil {
 		log.Fatal(err)
 	}
 }
