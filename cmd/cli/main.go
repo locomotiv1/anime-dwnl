@@ -87,9 +87,9 @@ func animeList(c *mal.Client, ctx context.Context) error {
 	} else {
 		fmt.Println("\n Currently Watching:")
 		fmt.Println("--------------------------------------------------")
-		currentEpisodes := episodeCount()
 
 		for _, item := range anime {
+			currentEpisodes := episodeCount(item.Anime.Title)
 			fmt.Printf("- %s (Ep: %d) / %d \n",
 				item.Anime.Title,
 				item.Status.NumEpisodesWatched,
@@ -102,13 +102,11 @@ func animeList(c *mal.Client, ctx context.Context) error {
 	return nil
 }
 
-func episodeCount() int {
-	searchTerm := "Jujutsu Kaisen: Shimetsu Kaiyuu - Zenpen"
-
+func episodeCount(title string) int {
 	requestBody := GraphQLRequest{
 		Query: query,
 		Variables: map[string]interface{}{
-			"search": searchTerm,
+			"search": title,
 		},
 	}
 
@@ -132,6 +130,9 @@ func episodeCount() int {
 	var result AniListResponse
 	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		log.Fatalf("Failed to parse response: %v", err)
+	}
+	if result.Data.Media.Title.Romaji == "" && result.Data.Media.Title.English == "" {
+		return 0
 	}
 
 	media := result.Data.Media
