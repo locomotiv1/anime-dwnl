@@ -162,7 +162,7 @@ func fetchTorrent(c *mal.Client, ctx context.Context) error {
 			searchQuery := item.Anime.Title
 			requestURL := fmt.Sprintf("https://nyaa.si/?page=rss&q=%s&c=1_2&f=0&s=seeders&o=desc", url.QueryEscape(searchQuery))
 			magnet := getTorrent(requestURL, trustedGroups)
-			println(magnet)
+			fmt.Printf("- %s -- %s\n", item.Anime.Title, magnet)
 		} else {
 			for i := episodesWatched + 1; i <= currentEpisode; i++ {
 				searchQuery := fmt.Sprintf("%s 0%d", item.Anime.Title, i) // it fucks up when u wanna search episodes with more than 9 episodes
