@@ -103,12 +103,18 @@ func fetchTorrent(c *mal.Client, ctx context.Context) error {
 	for _, item := range anime {
 		currentEpisode := episodeCount(item.Anime.Title)
 		episodesWatched := item.Status.NumEpisodesWatched
-
-		for i := episodesWatched + 1; i <= currentEpisode; i++ {
-			searchQuery := fmt.Sprintf("%s 0%d", item.Anime.Title, i)
+		if episodesWatched == 0 {
+			searchQuery := item.Anime.Title
 			requestURL := fmt.Sprintf("https://nyaa.si/?page=rss&q=%s&c=1_2&f=0", url.QueryEscape(searchQuery))
 			println(requestURL)
+		} else {
+			for i := episodesWatched + 1; i <= currentEpisode; i++ {
+				searchQuery := fmt.Sprintf("%s 0%d", item.Anime.Title, i)
+				requestURL := fmt.Sprintf("https://nyaa.si/?page=rss&q=%s&c=1_2&f=0", url.QueryEscape(searchQuery))
+				println(requestURL)
+			}
 		}
+
 	}
 	return nil
 }
