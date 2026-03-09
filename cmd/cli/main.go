@@ -103,9 +103,7 @@ func main() {
 	}
 }
 
-// Notice we added trustedUploaders []string here!
 func getTorrent(requestURL string, trustedUploaders []string) string {
-	// 1. Send the HTTP Request
 	req, err := http.NewRequest("GET", requestURL, nil)
 	if err != nil {
 		return ""
@@ -119,7 +117,6 @@ func getTorrent(requestURL string, trustedUploaders []string) string {
 	}
 	defer resp.Body.Close()
 
-	// 2. Read the response & Parse XML
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return ""
@@ -130,23 +127,20 @@ func getTorrent(requestURL string, trustedUploaders []string) string {
 		return ""
 	}
 
-	// 3. Filter for 1080p AND Trusted Uploaders
 	for _, item := range feed.Items {
-		// First, verify it is 1080p
 		if strings.Contains(item.Title, "1080p") {
-			// Then, check if the title contains ANY of our trusted groups
 			for _, group := range trustedUploaders {
-				// Using strings.Contains allows it to match "[SubsPlease]" even
-				// if it's buried in a long title string.
 				if strings.Contains(item.Title, group) {
-					// We found a match! Return the magnet link immediately.
 					return fmt.Sprintf("magnet:?xt=urn:btih:%s", item.InfoHash)
 				}
 			}
 		}
 	}
 
-	return "" // Return blank if no matching torrents were found
+	return ""
+}
+
+func download() {
 }
 
 func fetchTorrent(c *mal.Client, ctx context.Context) error {
@@ -174,7 +168,7 @@ func fetchTorrent(c *mal.Client, ctx context.Context) error {
 				searchQuery := fmt.Sprintf("%s 0%d", item.Anime.Title, i) // it fucks up when u wanna search episodes with more than 9 episodes
 				requestURL := fmt.Sprintf("https://nyaa.si/?page=rss&q=%s&c=1_2&f=0&s=seeders&o=desc", url.QueryEscape(searchQuery))
 				magnet := getTorrent(requestURL, trustedGroups)
-				println(magnet)
+				fmt.Printf("- %s (Ep: %d) -- %s\n", item.Anime.Title, i, magnet)
 			}
 		}
 	}
