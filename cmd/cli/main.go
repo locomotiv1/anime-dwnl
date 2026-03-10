@@ -146,7 +146,7 @@ func download() {
 func fetchTorrent(c *mal.Client, ctx context.Context) error {
 	trustedGroups := []string{"SubsPlease", "Erai-raws", "Judas"}
 	anime, _, err := c.User.AnimeList(ctx, "@me",
-		mal.Fields{"list_status"},
+		mal.Fields{"list_status", "status"},
 		mal.AnimeStatusWatching,
 		mal.SortAnimeListByListUpdatedAt,
 	)
@@ -158,18 +158,21 @@ func fetchTorrent(c *mal.Client, ctx context.Context) error {
 		currentEpisode := episodeCount(item.Anime.Title)
 		episodesWatched := item.Status.NumEpisodesWatched
 
-		if episodesWatched == 0 {
+		if episodesWatched == 0 && item.Anime.Status == "finished_airing" {
 			searchQuery := item.Anime.Title
 			requestURL := fmt.Sprintf("https://nyaa.si/?page=rss&q=%s&c=1_2&f=0&s=seeders&o=desc", url.QueryEscape(searchQuery))
 			magnet := getTorrent(requestURL, trustedGroups)
 			fmt.Printf("- %s -- %s\n", item.Anime.Title, magnet)
-		} else {
+
+		} else if item.Anime.Status == "currently_airing" {
 			for i := episodesWatched + 1; i <= currentEpisode; i++ {
-				searchQuery := fmt.Sprintf("%s 0%d", item.Anime.Title, i) // it fucks up when u wanna search episodes with more than 9 episodes
+				searchQuery := fmt.Sprintf("%s %02d", item.Anime.Title, i)
 				requestURL := fmt.Sprintf("https://nyaa.si/?page=rss&q=%s&c=1_2&f=0&s=seeders&o=desc", url.QueryEscape(searchQuery))
 				magnet := getTorrent(requestURL, trustedGroups)
 				fmt.Printf("- %s (Ep: %d) -- %s\n", item.Anime.Title, i, magnet)
 			}
+		} else if episodesWatched > 0 && item.Anime.Status == "finished_airing" {
+			continue
 		}
 	}
 	return nil
