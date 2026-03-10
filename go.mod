@@ -13,6 +13,7 @@ require (
 
 require (
 	github.com/RoaringBitmap/roaring v1.2.3 // indirect
+	github.com/adhocore/chin v1.1.0 // indirect
 	github.com/agnivade/levenshtein v1.2.1 // indirect
 	github.com/alecthomas/atomic v0.1.0-alpha2 // indirect
 	github.com/anacrolix/btree v0.0.0-20251201064447-d86c3fa41bd8 // indirect

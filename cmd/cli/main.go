@@ -11,8 +11,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
+	"time"
 
+	"github.com/adhocore/chin"
+	"github.com/anacrolix/torrent"
 	"github.com/nstratos/go-myanimelist/mal"
 	"github.com/urfave/cli/v3"
 )
@@ -88,10 +94,19 @@ func main() {
 				Name:  "download",
 				Usage: "Download all of your missing episodes",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					err := fetchTorrent(c, ctx)
+					fmt.Println("You are downloading your entire watch list, this might take a while")
+					fmt.Println("Use _ to download specific anime(s)")
+					var wg sync.WaitGroup
+
+					s := chin.New().WithWait(&wg)
+					go s.Start()
+					magnets, err := fetchTorrent(c, ctx)
+					s.Stop()
+					wg.Wait()
 					if err != nil {
 						return err
 					}
+					download(magnets)
 					return nil
 				},
 			},
@@ -140,18 +155,89 @@ func getTorrent(requestURL string, trustedUploaders []string) string {
 	return ""
 }
 
-func download() {
+func download(magnets []string) {
+	clientConfig := torrent.NewDefaultClientConfig()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalf("could now find home directory %v", err)
+	}
+	downloadFolder := filepath.Join(homeDir, "anime")
+	clientConfig.DataDir = downloadFolder
+
+	c, err := torrent.NewClient(clientConfig)
+	if err != nil {
+		log.Fatalf("Error creating torrent client: %v", err)
+	}
+	defer c.Close()
+
+	fmt.Printf("Queuing up %d episodes for download...\n", len(magnets))
+
+	for _, magnetLink := range magnets {
+
+		t, err := c.AddMagnet(magnetLink)
+		if err != nil {
+			log.Printf("Error adding magnet: %v\n", err)
+			continue
+		}
+
+		// We use a 'goroutine' here.
+		// This tells Go to fetch the metadata for torrents at the same time in the background.
+		// If we didn't use 'go' here, the program would get stuck waiting for Episode 1
+		// to find peers before it even tried to look for Episode 2!
+		go func(currTorrent *torrent.Torrent) {
+			<-currTorrent.GotInfo()
+			currTorrent.DownloadAll()
+		}(t)
+	}
+	go func() {
+		for {
+			time.Sleep(3 * time.Second)
+			// This clears terminal screen so that this whole block of text wont be printed to the terminal every single time it updates
+			fmt.Print("\033[H\033[2J")
+			fmt.Println("\n--- Current Downloads ---")
+			activeTorrents := c.Torrents()
+
+			sort.Slice(activeTorrents, func(i, j int) bool {
+				return activeTorrents[i].Name() < activeTorrents[j].Name()
+			})
+
+			for _, t := range activeTorrents {
+
+				if t.Info() == nil {
+					fmt.Printf("[Fetching Metadata] %s\n", t.Name())
+					continue
+				}
+
+				completed := t.BytesCompleted()
+				total := t.Info().TotalLength()
+
+				if total > 0 {
+					percent := float64(completed) / float64(total) * 100
+
+					if percent == 100 {
+						fmt.Printf("[ DONE ] %s\n", t.Info().Name)
+					} else {
+						fmt.Printf("[%5.1f%%] %s\n", percent, t.Info().Name)
+					}
+				}
+			}
+		}
+	}()
+
+	c.WaitAll()
+	fmt.Println("All torrents successfully downloaded!")
 }
 
-func fetchTorrent(c *mal.Client, ctx context.Context) error {
+func fetchTorrent(c *mal.Client, ctx context.Context) ([]string, error) {
 	trustedGroups := []string{"SubsPlease", "Erai-raws", "Judas"}
+	var magnets []string
 	anime, _, err := c.User.AnimeList(ctx, "@me",
 		mal.Fields{"list_status", "status"},
 		mal.AnimeStatusWatching,
 		mal.SortAnimeListByListUpdatedAt,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for _, item := range anime {
@@ -162,20 +248,26 @@ func fetchTorrent(c *mal.Client, ctx context.Context) error {
 			searchQuery := item.Anime.Title
 			requestURL := fmt.Sprintf("https://nyaa.si/?page=rss&q=%s&c=1_2&f=0&s=seeders&o=desc", url.QueryEscape(searchQuery))
 			magnet := getTorrent(requestURL, trustedGroups)
-			fmt.Printf("- %s -- %s\n", item.Anime.Title, magnet)
+			if magnet != "" {
+				magnets = append(magnets, magnet)
+			}
+			// fmt.Printf("- %s -- %s\n", item.Anime.Title, magnet)
 
 		} else if item.Anime.Status == "currently_airing" {
 			for i := episodesWatched + 1; i <= currentEpisode; i++ {
 				searchQuery := fmt.Sprintf("%s %02d", item.Anime.Title, i)
 				requestURL := fmt.Sprintf("https://nyaa.si/?page=rss&q=%s&c=1_2&f=0&s=seeders&o=desc", url.QueryEscape(searchQuery))
 				magnet := getTorrent(requestURL, trustedGroups)
-				fmt.Printf("- %s (Ep: %d) -- %s\n", item.Anime.Title, i, magnet)
+				if magnet != "" {
+					magnets = append(magnets, magnet)
+				}
+				// fmt.Printf("- %s (Ep: %d) -- %s\n", item.Anime.Title, i, magnet)
 			}
 		} else if episodesWatched > 0 && item.Anime.Status == "finished_airing" {
 			continue
 		}
 	}
-	return nil
+	return magnets, err
 }
 
 func animeList(c *mal.Client, ctx context.Context) error {
