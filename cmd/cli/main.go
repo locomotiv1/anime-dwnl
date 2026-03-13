@@ -23,54 +23,6 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-const query = `
-query ($search: String) {
-  Media (search: $search, type: ANIME) {
-    title {
-      romaji
-      english
-    }
-    status
-    episodes
-    nextAiringEpisode {
-      episode
-    }
-  }
-}
-`
-
-type GraphQLRequest struct {
-	Query     string                 `json:"query"`
-	Variables map[string]interface{} `json:"variables"`
-}
-
-type AniListResponse struct {
-	Data struct {
-		Media struct {
-			Title struct {
-				Romaji  string `json:"romaji"`
-				English string `json:"english"`
-			} `json:"title"`
-			Status            string `json:"status"`
-			Episodes          int    `json:"episodes"`
-			NextAiringEpisode *struct {
-				Episode int `json:"episode"`
-			} `json:"nextAiringEpisode"`
-		} `json:"Media"`
-	} `json:"data"`
-}
-
-type Rss struct {
-	Items []RssItem `xml:"channel>item"`
-}
-
-type RssItem struct {
-	Title    string `xml:"title"`
-	Link     string `xml:"link"`
-	InfoHash string `xml:"infoHash"`
-	Seeders  int    `xml:"seeders"`
-}
-
 func main() {
 	oauth2Client := getAuthClient()
 	c := mal.NewClient(oauth2Client)
@@ -93,14 +45,24 @@ func main() {
 			{
 				Name:  "download",
 				Usage: "Download all of your missing episodes",
+				Flags: []cli.Flag{
+					&cli.IntFlag{
+						Name:    "listing",
+						Aliases: []string{"l"},
+						Usage:   "Download all episodes from the corrensponding anime from 'anime list' function",
+					},
+				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					fmt.Println("You are downloading your entire watch list, this might take a while")
-					fmt.Println("Use _ to download specific anime(s)")
+					listNum := int(cmd.Int("listing"))
+					if listNum == 0 {
+						fmt.Println("You are downloading your entire watch list, this might take a while")
+						fmt.Println("Use -l <number> to download specific anime")
+					}
 					var wg sync.WaitGroup
-
 					s := chin.New().WithWait(&wg)
 					go s.Start()
-					magnets, err := fetchTorrent(c, ctx)
+
+					magnets, err := fetchTorrent(c, ctx, listNum)
 					s.Stop()
 					wg.Wait()
 					if err != nil {
@@ -146,7 +108,8 @@ func getTorrent(requestURL string, trustedUploaders []string) string {
 		if strings.Contains(item.Title, "1080p") {
 			for _, group := range trustedUploaders {
 				if strings.Contains(item.Title, group) {
-					return fmt.Sprintf("magnet:?xt=urn:btih:%s", item.InfoHash)
+					trackers := "&tr=http%3A%2F%2Fnyaa.tracker.wf%3A7777%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
+					return fmt.Sprintf("magnet:?xt=urn:btih:%s%s", item.InfoHash, trackers)
 				}
 			}
 		}
@@ -228,7 +191,7 @@ func download(magnets []string) {
 	fmt.Println("All torrents successfully downloaded!")
 }
 
-func fetchTorrent(c *mal.Client, ctx context.Context) ([]string, error) {
+func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int) ([]string, error) {
 	trustedGroups := []string{"SubsPlease", "Erai-raws", "Judas"}
 	var magnets []string
 	anime, _, err := c.User.AnimeList(ctx, "@me",
@@ -239,8 +202,14 @@ func fetchTorrent(c *mal.Client, ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	if targetIndex > len(anime) {
+		return nil, fmt.Errorf("Invalid list number")
+	}
 
-	for _, item := range anime {
+	for i, item := range anime {
+		if targetIndex > 0 && i != (targetIndex-1) {
+			continue
+		}
 		currentEpisode := episodeCount(item.Anime.Title)
 		episodesWatched := item.Status.NumEpisodesWatched
 
@@ -251,7 +220,6 @@ func fetchTorrent(c *mal.Client, ctx context.Context) ([]string, error) {
 			if magnet != "" {
 				magnets = append(magnets, magnet)
 			}
-			// fmt.Printf("- %s -- %s\n", item.Anime.Title, magnet)
 
 		} else if item.Anime.Status == "currently_airing" {
 			for i := episodesWatched + 1; i <= currentEpisode; i++ {
@@ -261,7 +229,6 @@ func fetchTorrent(c *mal.Client, ctx context.Context) ([]string, error) {
 				if magnet != "" {
 					magnets = append(magnets, magnet)
 				}
-				// fmt.Printf("- %s (Ep: %d) -- %s\n", item.Anime.Title, i, magnet)
 			}
 		} else if episodesWatched > 0 && item.Anime.Status == "finished_airing" {
 			continue
@@ -286,9 +253,10 @@ func animeList(c *mal.Client, ctx context.Context) error {
 		fmt.Println("\n Currently Watching:")
 		fmt.Println("--------------------------------------------------")
 
-		for _, item := range anime {
+		for i, item := range anime {
 			currentEpisodes := episodeCount(item.Anime.Title)
-			fmt.Printf("- %s (Ep: %d) / %d \n",
+			fmt.Printf("%d - %s (Ep: %d) / %d \n",
+				i+1,
 				item.Anime.Title,
 				item.Status.NumEpisodesWatched,
 				currentEpisodes,
