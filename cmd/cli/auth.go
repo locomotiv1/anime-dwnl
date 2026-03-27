@@ -9,10 +9,31 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
-	"github.com/joho/godotenv"
 	"golang.org/x/oauth2"
 )
+
+const MAL_CLIENT_ID = "7eb3a4fec9f349a2adb8962f5143140f"
+
+func getConfigDir() string {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatalf("Unable to find user home directory: %v", err)
+		}
+		configDir = homeDir
+	}
+
+	appConfigDir := filepath.Join(configDir, "anime-cli")
+
+	if err := os.MkdirAll(appConfigDir, 0o755); err != nil {
+		log.Fatalf("Failed to create config directory: %v", err)
+	}
+
+	return appConfigDir
+}
 
 func tokenFromFile(file string) (*oauth2.Token, error) {
 	f, err := os.Open(file)
@@ -40,17 +61,10 @@ func generateVerifier() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-// getAuthClient handles the MAL login process and returns an authenticated HTTP client.
 func getAuthClient() *http.Client {
-	godotenv.Load()
-	clientID := os.Getenv("MAL_CLIENT_ID")
-	if clientID == "" {
-		log.Fatal("MAL_CLIENT_ID is missing from your .env file!")
-	}
-
 	oauthConfig := &oauth2.Config{
-		ClientID:     clientID,
-		ClientSecret: os.Getenv("MAL_CLIENT_SECRET"), // MAL doesn't strictly need the secret for PKCE, but it's good to have
+		ClientID:     MAL_CLIENT_ID,
+		ClientSecret: "", // Secret is completely omitted for public clients (PKCE)
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  "https://myanimelist.net/v1/oauth2/authorize",
 			TokenURL: "https://myanimelist.net/v1/oauth2/token",
@@ -58,7 +72,9 @@ func getAuthClient() *http.Client {
 		RedirectURL: "http://localhost:8080/callback",
 	}
 
-	tokenFile := "token.json"
+	appConfigDir := getConfigDir()
+	tokenFile := filepath.Join(appConfigDir, "token.json")
+
 	token, err := tokenFromFile(tokenFile)
 	if err != nil {
 		fmt.Println("No saved login found. Starting authentication...")
