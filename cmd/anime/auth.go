@@ -14,7 +14,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const MAL_CLIENT_ID = "7eb3a4fec9f349a2adb8962f5143140f"
+const MAL_CLIENT_ID = "c85377fbeb0e1b83e9b8f4cebe024b7c"
 
 func getConfigDir() string {
 	configDir, err := os.UserConfigDir()
@@ -66,8 +66,9 @@ func getAuthClient() *http.Client {
 		ClientID:     MAL_CLIENT_ID,
 		ClientSecret: "", // Secret is completely omitted for public clients (PKCE)
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  "https://myanimelist.net/v1/oauth2/authorize",
-			TokenURL: "https://myanimelist.net/v1/oauth2/token",
+			AuthURL:   "https://myanimelist.net/v1/oauth2/authorize",
+			TokenURL:  "https://myanimelist.net/v1/oauth2/token",
+			AuthStyle: oauth2.AuthStyleInParams,
 		},
 		RedirectURL: "http://localhost:8080/callback",
 	}
@@ -87,7 +88,8 @@ func getAuthClient() *http.Client {
 			code := r.URL.Query().Get("code")
 			t, err := oauthConfig.Exchange(context.Background(), code, oauth2.SetAuthURLParam("code_verifier", codeVerifier))
 			if err != nil {
-				http.Error(w, "Failed to exchange token", http.StatusInternalServerError)
+				fmt.Printf("\n[Error] Failed to exchange token: %v\n", err)
+				http.Error(w, "Failed to exchange token. Check your terminal for details.", http.StatusInternalServerError)
 				return
 			}
 			fmt.Fprintf(w, "Login successful! You can close this browser window and return to your terminal.")
