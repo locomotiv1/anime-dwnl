@@ -204,7 +204,13 @@ func download(tasks []DownloadTask) {
 	c.WaitAll()
 	fmt.Println("All torrents successfully downloaded!")
 
-	fmt.Println("Organizing files into folders...")
+	// Gather all the file paths BEFORE we close the client
+	type MoveTask struct {
+		OldPath string
+		NewPath string
+	}
+	var moves []MoveTask
+
 	for _, t := range c.Torrents() {
 		if t.Info() == nil {
 			continue
@@ -222,10 +228,17 @@ func download(tasks []DownloadTask) {
 		newPath := filepath.Join(animeFolder, t.Info().Name)
 
 		if oldPath != newPath {
-			err := os.Rename(oldPath, newPath)
-			if err != nil {
-				log.Printf("Failed to move %s: %v\n", t.Info().Name, err)
-			}
+			moves = append(moves, MoveTask{OldPath: oldPath, NewPath: newPath})
+		}
+	}
+
+	c.Close()
+
+	fmt.Println("Organizing files into folders...")
+	for _, m := range moves {
+		err := os.Rename(m.OldPath, m.NewPath)
+		if err != nil {
+			log.Printf("Failed to move %s: %v\n", m.OldPath, err)
 		}
 	}
 	fmt.Println("Done organizing!")
