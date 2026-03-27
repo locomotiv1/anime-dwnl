@@ -23,6 +23,20 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+type DownloadTask struct {
+	Title  string
+	Magnet string
+}
+
+// Removes illegal characters from Anime titles so folder creation doesn't crash on Windows
+func sanitizeFolder(name string) string {
+	invalidChars := []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*"}
+	for _, char := range invalidChars {
+		name = strings.ReplaceAll(name, char, "")
+	}
+	return strings.TrimSpace(name)
+}
+
 func main() {
 	oauth2Client := getAuthClient()
 	c := mal.NewClient(oauth2Client)
@@ -62,13 +76,13 @@ func main() {
 					s := chin.New().WithWait(&wg)
 					go s.Start()
 
-					magnets, err := fetchTorrent(c, ctx, listNum)
+					tasks, err := fetchTorrent(c, ctx, listNum)
 					s.Stop()
 					wg.Wait()
 					if err != nil {
 						return err
 					}
-					download(magnets)
+					download(tasks)
 					return nil
 				},
 			},
@@ -118,7 +132,7 @@ func getTorrent(requestURL string, trustedUploaders []string) string {
 	return ""
 }
 
-func download(magnets []string) {
+func download(tasks []DownloadTask) {
 	clientConfig := torrent.NewDefaultClientConfig()
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -133,29 +147,30 @@ func download(magnets []string) {
 	}
 	defer c.Close()
 
-	fmt.Printf("Queuing up %d episodes for download...\n", len(magnets))
+	fmt.Printf("Queuing up %d episodes for download...\n", len(tasks))
 
-	for _, magnetLink := range magnets {
+	// create a map to link a torrent's unique hash back to its Anime Title
+	titleMap := make(map[string]string)
 
-		t, err := c.AddMagnet(magnetLink)
+	for _, task := range tasks {
+		t, err := c.AddMagnet(task.Magnet)
 		if err != nil {
 			log.Printf("Error adding magnet: %v\n", err)
 			continue
 		}
 
-		// We use a 'goroutine' here.
-		// This tells Go to fetch the metadata for torrents at the same time in the background.
-		// If we didn't use 'go' here, the program would get stuck waiting for Episode 1
-		// to find peers before it even tried to look for Episode 2!
+		// Store the clean anime title in our map using the torrent's hash as the key
+		titleMap[t.InfoHash().String()] = sanitizeFolder(task.Title)
+
 		go func(currTorrent *torrent.Torrent) {
 			<-currTorrent.GotInfo()
 			currTorrent.DownloadAll()
 		}(t)
 	}
+
 	go func() {
 		for {
 			time.Sleep(3 * time.Second)
-			// This clears terminal screen so that this whole block of text wont be printed to the terminal every single time it updates
 			fmt.Print("\033[H\033[2J")
 			fmt.Println("\n--- Current Downloads ---")
 			activeTorrents := c.Torrents()
@@ -165,7 +180,6 @@ func download(magnets []string) {
 			})
 
 			for _, t := range activeTorrents {
-
 				if t.Info() == nil {
 					fmt.Printf("[Fetching Metadata] %s\n", t.Name())
 					continue
@@ -189,11 +203,38 @@ func download(magnets []string) {
 
 	c.WaitAll()
 	fmt.Println("All torrents successfully downloaded!")
+
+	fmt.Println("Organizing files into folders...")
+	for _, t := range c.Torrents() {
+		if t.Info() == nil {
+			continue
+		}
+
+		animeTitle, exists := titleMap[t.InfoHash().String()]
+		if !exists || animeTitle == "" {
+			continue
+		}
+
+		animeFolder := filepath.Join(downloadFolder, animeTitle)
+		os.MkdirAll(animeFolder, 0o755)
+
+		oldPath := filepath.Join(downloadFolder, t.Info().Name)
+		newPath := filepath.Join(animeFolder, t.Info().Name)
+
+		if oldPath != newPath {
+			err := os.Rename(oldPath, newPath)
+			if err != nil {
+				log.Printf("Failed to move %s: %v\n", t.Info().Name, err)
+			}
+		}
+	}
+	fmt.Println("Done organizing!")
 }
 
-func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int) ([]string, error) {
+func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int) ([]DownloadTask, error) {
 	trustedGroups := []string{"SubsPlease", "Erai-raws", "Judas"}
-	var magnets []string
+	var tasks []DownloadTask
+
 	anime, _, err := c.User.AnimeList(ctx, "@me",
 		mal.Fields{"list_status", "status"},
 		mal.AnimeStatusWatching,
@@ -218,7 +259,7 @@ func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int) ([]string
 			requestURL := fmt.Sprintf("https://nyaa.si/?page=rss&q=%s&c=1_2&f=0&s=seeders&o=desc", url.QueryEscape(searchQuery))
 			magnet := getTorrent(requestURL, trustedGroups)
 			if magnet != "" {
-				magnets = append(magnets, magnet)
+				tasks = append(tasks, DownloadTask{Title: item.Anime.Title, Magnet: magnet})
 			}
 
 		} else if item.Anime.Status == "currently_airing" {
@@ -227,14 +268,14 @@ func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int) ([]string
 				requestURL := fmt.Sprintf("https://nyaa.si/?page=rss&q=%s&c=1_2&f=0&s=seeders&o=desc", url.QueryEscape(searchQuery))
 				magnet := getTorrent(requestURL, trustedGroups)
 				if magnet != "" {
-					magnets = append(magnets, magnet)
+					tasks = append(tasks, DownloadTask{Title: item.Anime.Title, Magnet: magnet})
 				}
 			}
 		} else if episodesWatched > 0 && item.Anime.Status == "finished_airing" {
 			continue
 		}
 	}
-	return magnets, err
+	return tasks, err
 }
 
 func animeList(c *mal.Client, ctx context.Context) error {
