@@ -88,6 +88,10 @@ func main() {
 					if err != nil {
 						return err
 					}
+					if len(tasks) == 0 {
+						fmt.Println("No new episodes to download.")
+						return nil
+					}
 					download(tasks)
 					return nil
 				},
