@@ -65,10 +65,16 @@ func main() {
 						Aliases: []string{"c"},
 						Usage:   "Specify the maximum number of episodes to download, only applies to currently airing anime",
 					},
+					&cli.StringFlag{
+						Name:    "dir",
+						Aliases: []string{"d"},
+						Usage:   "Set a custom download directory path (default: ~/anime/)",
+					},
 				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					listNum := int(cmd.Int("listing"))
 					count := int(cmd.Int("count"))
+					customDir := cmd.String("dir")
 
 					if listNum == 0 {
 						fmt.Println("You are downloading your entire watch list, this might take a while")
@@ -101,7 +107,7 @@ func main() {
 						return nil
 					}
 
-					download(tasks)
+					download(tasks, customDir)
 					return nil
 				},
 			},
@@ -113,12 +119,23 @@ func main() {
 	}
 }
 
-func download(tasks []DownloadTask) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Fatalf("could not find home directory: %v", err)
+func download(tasks []DownloadTask, customDir string) {
+	var downloadFolder string
+
+	if customDir != "" {
+		downloadFolder = customDir
+	} else {
+		// Fallback to the default ~/anime/
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatalf("could not find home directory: %v", err)
+		}
+		downloadFolder = filepath.Join(homeDir, "anime")
 	}
-	downloadFolder := filepath.Join(homeDir, "anime")
+
+	if err := os.MkdirAll(downloadFolder, 0o755); err != nil {
+		log.Fatalf("Could not create download directory: %v", err)
+	}
 
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DataDir = downloadFolder
@@ -128,7 +145,7 @@ func download(tasks []DownloadTask) {
 		log.Fatalf("Error creating torrent client: %v", err)
 	}
 
-	fmt.Printf("Queuing up %d episodes for download...\n", len(tasks))
+	fmt.Printf("Queuing up %d episodes for download in %s...\n", len(tasks), downloadFolder)
 
 	titleMap := make(map[string]string)
 	for _, task := range tasks {
@@ -144,7 +161,6 @@ func download(tasks []DownloadTask) {
 		}(t)
 	}
 
-	// Use a done channel to cleanly exit the monitor loop
 	done := make(chan struct{})
 	go monitorProgress(c, done)
 
@@ -152,7 +168,6 @@ func download(tasks []DownloadTask) {
 	close(done)
 	fmt.Println("All torrents successfully downloaded!")
 
-	// Figure out paths before closing the client
 	moves := getMoveTasks(c, downloadFolder, titleMap)
 
 	c.Close()
