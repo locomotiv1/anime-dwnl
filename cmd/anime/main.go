@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"text/tabwriter"
 	"time"
 
 	"github.com/adhocore/chin"
@@ -308,7 +309,7 @@ func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int, count int
 
 func animeList(c *mal.Client, ctx context.Context) error {
 	anime, _, err := c.User.AnimeList(ctx, "@me",
-		mal.Fields{"list_status"},
+		mal.Fields{"list_status", "status"},
 		mal.AnimeStatusWatching,
 		mal.SortAnimeListByListUpdatedAt,
 	)
@@ -324,15 +325,22 @@ func animeList(c *mal.Client, ctx context.Context) error {
 	fmt.Println("\n Currently Watching:")
 	fmt.Println("--------------------------------------------------")
 
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+
 	for i, item := range anime {
 		currentEpisodes := episodeCount(item.Anime.Title)
-		fmt.Printf("%d - %s (Ep: %d) / %d \n",
+		cleanStatus := strings.ReplaceAll(item.Anime.Status, "_", " ")
+
+		fmt.Fprintf(w, "%d - %s\t (Ep: %d) / %d\t [%s]\n",
 			i+1,
 			item.Anime.Title,
 			item.Status.NumEpisodesWatched,
 			currentEpisodes,
+			cleanStatus,
 		)
 	}
+
+	w.Flush()
 	fmt.Println("--------------------------------------------------")
 	return nil
 }
