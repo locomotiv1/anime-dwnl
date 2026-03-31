@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
@@ -72,6 +73,16 @@ func main() {
 					if listNum == 0 {
 						fmt.Println("You are downloading your entire watch list, this might take a while")
 						fmt.Println("Use -l <number> to download specific anime")
+						fmt.Print("\nDo you want to continue? [y/N]: ")
+
+						reader := bufio.NewReader(os.Stdin)
+						input, _ := reader.ReadString('\n')
+						input = strings.TrimSpace(strings.ToLower(input))
+
+						if input != "y" && input != "yes" {
+							fmt.Println("Download cancelled.")
+							return nil
+						}
 					}
 
 					var wg sync.WaitGroup
