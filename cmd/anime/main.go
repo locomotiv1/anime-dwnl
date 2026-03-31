@@ -65,9 +65,15 @@ func main() {
 						Aliases: []string{"l"},
 						Usage:   "Download all episodes from the corrensponding anime from 'anime list' function",
 					},
+					&cli.IntFlag{
+						Name:    "count",
+						Aliases: []string{"c"},
+						Usage:   "Specify the maximum number of episodes to download, only applies to currently airing anime",
+					},
 				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					listNum := int(cmd.Int("listing"))
+					count := int(cmd.Int("count"))
 					if listNum == 0 {
 						fmt.Println("You are downloading your entire watch list, this might take a while")
 						fmt.Println("Use -l <number> to download specific anime")
@@ -76,7 +82,7 @@ func main() {
 					s := chin.New().WithWait(&wg)
 					go s.Start()
 
-					tasks, err := fetchTorrent(c, ctx, listNum)
+					tasks, err := fetchTorrent(c, ctx, listNum, count)
 					s.Stop()
 					wg.Wait()
 					if err != nil {
@@ -244,7 +250,7 @@ func download(tasks []DownloadTask) {
 	fmt.Println("Done organizing!")
 }
 
-func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int) ([]DownloadTask, error) {
+func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int, count int) ([]DownloadTask, error) {
 	trustedGroups := []string{"SubsPlease", "Erai-raws", "Judas"}
 	var tasks []DownloadTask
 
@@ -268,6 +274,9 @@ func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int) ([]Downlo
 		episodesWatched := item.Status.NumEpisodesWatched
 
 		if episodesWatched == 0 && item.Anime.Status == "finished_airing" {
+			if count > 0 {
+				fmt.Printf("\n[Notice] '%s' has finished airing. Ignoring the episode count flag and downloading the full batch instead.\n", item.Anime.Title)
+			}
 			searchQuery := item.Anime.Title
 			requestURL := fmt.Sprintf("https://nyaa.si/?page=rss&q=%s&c=1_2&f=0&s=seeders&o=desc", url.QueryEscape(searchQuery))
 			magnet := getTorrent(requestURL, trustedGroups)
@@ -276,7 +285,11 @@ func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int) ([]Downlo
 			}
 
 		} else if item.Anime.Status == "currently_airing" {
-			for i := episodesWatched + 1; i <= currentEpisode; i++ {
+			endEpisode := currentEpisode
+			if count > 0 && (episodesWatched+count) < currentEpisode {
+				endEpisode = episodesWatched + count
+			}
+			for i := episodesWatched + 1; i <= endEpisode; i++ {
 				searchQuery := fmt.Sprintf("%s %02d", item.Anime.Title, i)
 				requestURL := fmt.Sprintf("https://nyaa.si/?page=rss&q=%s&c=1_2&f=0&s=seeders&o=desc", url.QueryEscape(searchQuery))
 				magnet := getTorrent(requestURL, trustedGroups)
