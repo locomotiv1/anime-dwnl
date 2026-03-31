@@ -106,7 +106,7 @@ func episodeCount(title string) int {
 	return media.Episodes
 }
 
-func getTorrent(searchQuery string, trustedUploaders []string) string {
+func getTorrent(searchQuery string, trustedUploaders []string, quality string) string {
 	requestURL := fmt.Sprintf("https://nyaa.si/?page=rss&q=%s&c=1_2&f=0&s=seeders&o=desc", url.QueryEscape(searchQuery))
 	req, err := http.NewRequest("GET", requestURL, nil)
 	if err != nil {
@@ -131,7 +131,7 @@ func getTorrent(searchQuery string, trustedUploaders []string) string {
 	}
 
 	for _, item := range feed.Items {
-		if strings.Contains(item.Title, "1080p") {
+		if strings.Contains(item.Title, quality) {
 			for _, group := range trustedUploaders {
 				if strings.Contains(item.Title, group) {
 					trackers := "&tr=http%3A%2F%2Fnyaa.tracker.wf%3A7777%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"

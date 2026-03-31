@@ -70,11 +70,17 @@ func main() {
 						Aliases: []string{"d"},
 						Usage:   "Set a custom download directory path (default: ~/anime/)",
 					},
+					&cli.StringFlag{
+						Name:    "quality",
+						Aliases: []string{"q"},
+						Usage:   "Set the video quality (e.g., 720p, 1080p, 480p)",
+					},
 				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					listNum := int(cmd.Int("listing"))
 					count := int(cmd.Int("count"))
 					customDir := cmd.String("dir")
+					quality := cmd.String("quality")
 
 					if listNum == 0 {
 						fmt.Println("You are downloading your entire watch list, this might take a while")
@@ -95,7 +101,7 @@ func main() {
 					s := chin.New().WithWait(&wg)
 					go s.Start()
 
-					tasks, err := fetchTorrent(c, ctx, listNum, count)
+					tasks, err := fetchTorrent(c, ctx, listNum, count, quality)
 					s.Stop()
 					wg.Wait()
 
@@ -247,7 +253,7 @@ func organizeFiles(moves []FileMoveTask) {
 	fmt.Println("Done organizing!")
 }
 
-func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int, count int) ([]DownloadTask, error) {
+func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int, count int, quality string) ([]DownloadTask, error) {
 	trustedGroups := []string{"SubsPlease", "Erai-raws", "Judas"}
 	var tasks []DownloadTask
 
@@ -276,7 +282,7 @@ func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int, count int
 				fmt.Printf("\n[Notice] '%s' has finished airing. Ignoring the episode count flag and downloading the full batch instead.\n", item.Anime.Title)
 			}
 
-			if magnet := getTorrent(item.Anime.Title, trustedGroups); magnet != "" {
+			if magnet := getTorrent(item.Anime.Title, trustedGroups, quality); magnet != "" {
 				tasks = append(tasks, DownloadTask{Title: item.Anime.Title, Magnet: magnet})
 			}
 
@@ -289,7 +295,7 @@ func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int, count int
 			for i := episodesWatched + 1; i <= endEpisode; i++ {
 				searchQuery := fmt.Sprintf("%s %02d", item.Anime.Title, i)
 
-				if magnet := getTorrent(searchQuery, trustedGroups); magnet != "" {
+				if magnet := getTorrent(searchQuery, trustedGroups, quality); magnet != "" {
 					tasks = append(tasks, DownloadTask{Title: item.Anime.Title, Magnet: magnet})
 				}
 			}
