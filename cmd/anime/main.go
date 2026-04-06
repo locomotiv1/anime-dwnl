@@ -351,12 +351,14 @@ func animeList(c *mal.Client, ctx context.Context) error {
 	for i, item := range anime {
 		currentEpisodes := episodeCount(item.Anime.Title)
 		cleanStatus := strings.ReplaceAll(item.Anime.Status, "_", " ")
-
 		userListStatus := strings.ReplaceAll(string(item.Status.Status), "_", " ")
+		url := fmt.Sprintf("https://myanimelist.net/anime/%d", item.Anime.ID)
+
+		title := fmt.Sprintf("\033]8;;%s\033\\%s\033]8;;\033\\", url, item.Anime.Title)
 
 		fmt.Fprintf(w, "%d - %s\t (Ep: %d) / %d\t [%s]\t (%s)\n",
 			i+1,
-			item.Anime.Title,
+			title,
 			item.Status.NumEpisodesWatched,
 			currentEpisodes,
 			cleanStatus,
