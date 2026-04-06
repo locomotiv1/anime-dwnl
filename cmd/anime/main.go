@@ -258,7 +258,7 @@ func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int, count int
 	trustedGroups := []string{"SubsPlease", "Erai-raws", "Judas"}
 	var tasks []DownloadTask
 
-	anime, _, err := c.User.AnimeList(ctx, "@me",
+	watching, _, err := c.User.AnimeList(ctx, "@me",
 		mal.Fields{"list_status", "status"},
 		mal.AnimeStatusWatching,
 		mal.SortAnimeListByListUpdatedAt,
@@ -266,6 +266,18 @@ func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int, count int
 	if err != nil {
 		return nil, err
 	}
+
+	planToWatch, _, err := c.User.AnimeList(ctx, "@me",
+		mal.Fields{"list_status", "status"},
+		mal.AnimeStatusPlanToWatch,
+		mal.SortAnimeListByListUpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	anime := append(watching, planToWatch...)
+
 	if targetIndex > len(anime) {
 		return nil, fmt.Errorf("invalid list number")
 	}
@@ -306,7 +318,7 @@ func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int, count int
 }
 
 func animeList(c *mal.Client, ctx context.Context) error {
-	anime, _, err := c.User.AnimeList(ctx, "@me",
+	watching, _, err := c.User.AnimeList(ctx, "@me",
 		mal.Fields{"list_status", "status"},
 		mal.AnimeStatusWatching,
 		mal.SortAnimeListByListUpdatedAt,
@@ -315,12 +327,23 @@ func animeList(c *mal.Client, ctx context.Context) error {
 		return err
 	}
 
+	planToWatch, _, err := c.User.AnimeList(ctx, "@me",
+		mal.Fields{"list_status", "status"},
+		mal.AnimeStatusPlanToWatch,
+		mal.SortAnimeListByListUpdatedAt,
+	)
+	if err != nil {
+		return err
+	}
+
+	anime := append(watching, planToWatch...)
+
 	if len(anime) == 0 {
-		fmt.Println("You aren't watching anything right now!")
+		fmt.Println("You aren't watching anything right now, and your plan-to-watch list is empty!")
 		return nil
 	}
 
-	fmt.Println("\n Currently Watching:")
+	fmt.Println("\n Anime List")
 	fmt.Println("--------------------------------------------------")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
@@ -329,12 +352,15 @@ func animeList(c *mal.Client, ctx context.Context) error {
 		currentEpisodes := episodeCount(item.Anime.Title)
 		cleanStatus := strings.ReplaceAll(item.Anime.Status, "_", " ")
 
-		fmt.Fprintf(w, "%d - %s\t (Ep: %d) / %d\t [%s]\n",
+		userListStatus := strings.ReplaceAll(string(item.Status.Status), "_", " ")
+
+		fmt.Fprintf(w, "%d - %s\t (Ep: %d) / %d\t [%s]\t (%s)\n",
 			i+1,
 			item.Anime.Title,
 			item.Status.NumEpisodesWatched,
 			currentEpisodes,
 			cleanStatus,
+			userListStatus,
 		)
 	}
 
