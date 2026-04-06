@@ -278,7 +278,7 @@ func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int, count int
 		currentEpisode := episodeCount(item.Anime.Title)
 		episodesWatched := item.Status.NumEpisodesWatched
 
-		if episodesWatched == 0 && item.Anime.Status == "finished_airing" {
+		if item.Anime.Status == "finished_airing" {
 			if count > 0 {
 				fmt.Printf("\n[Notice] '%s' has finished airing. Ignoring the episode count flag and downloading the full batch instead.\n", item.Anime.Title)
 			}
@@ -300,8 +300,6 @@ func fetchTorrent(c *mal.Client, ctx context.Context, targetIndex int, count int
 					tasks = append(tasks, DownloadTask{Title: item.Anime.Title, Magnet: magnet})
 				}
 			}
-		} else if episodesWatched > 0 && item.Anime.Status == "finished_airing" {
-			continue
 		}
 	}
 	return tasks, nil
